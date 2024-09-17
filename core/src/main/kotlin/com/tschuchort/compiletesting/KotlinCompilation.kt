@@ -18,13 +18,6 @@ package com.tschuchort.compiletesting
 
 import com.facebook.buck.jvm.java.javax.SynchronizedToolProvider
 import com.tschuchort.compiletesting.kapt.toPluginOptions
-import java.io.File
-import java.io.OutputStreamWriter
-import java.nio.file.Path
-import javax.annotation.processing.Processor
-import javax.tools.Diagnostic
-import javax.tools.DiagnosticCollector
-import javax.tools.JavaFileObject
 import org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments
 import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler
 import org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi
@@ -39,11 +32,18 @@ import org.jetbrains.kotlin.kapt3.base.incremental.DeclaredProcType
 import org.jetbrains.kotlin.kapt3.base.incremental.IncrementalProcessor
 import org.jetbrains.kotlin.kapt3.util.MessageCollectorBackedKaptLogger
 import org.jetbrains.kotlin.kapt4.Kapt4CompilerPluginRegistrar
+import java.io.File
+import java.io.OutputStreamWriter
+import java.nio.file.Path
+import javax.annotation.processing.Processor
+import javax.tools.Diagnostic
+import javax.tools.DiagnosticCollector
+import javax.tools.JavaFileObject
 
 data class PluginOption(
   val pluginId: PluginId,
   val optionName: OptionName,
-  val optionValue: OptionValue,
+  val optionValue: OptionValue
 )
 
 typealias PluginId = String
@@ -136,7 +136,8 @@ class KotlinCompilation : AbstractKotlinCompilation<K2JVMCompilerArguments>() {
   var skipRuntimeVersionCheck: Boolean? = null
 
   /** Combine modules for source files and binary dependencies into a single module */
-  @Deprecated("Removed in Kotlinc, this does nothing now.") var singleModule: Boolean = false
+  @Deprecated("Removed in Kotlinc, this does nothing now.")
+  var singleModule: Boolean = false
 
   /** Suppress the \"cannot access built-in declaration\" error (useful with -no-stdlib) */
   var suppressMissingBuiltinsError: Boolean = false
@@ -220,8 +221,11 @@ class KotlinCompilation : AbstractKotlinCompilation<K2JVMCompilerArguments>() {
    * Note: Using a tools.jar file with a JDK 9 or later leads to an internal compiler error!
    */
   var toolsJar: File? by default {
-    if (!isJdk9OrLater()) jdkHome?.let { findToolsJarFromJdk(it) } ?: HostEnvironment.toolsJar
-    else null
+    if (!isJdk9OrLater()) {
+      jdkHome?.let { findToolsJarFromJdk(it) } ?: HostEnvironment.toolsJar
+    } else {
+      null
+    }
   }
 
   // *.class files, Jars and resources (non-temporary) that are created by the
@@ -284,6 +288,9 @@ class KotlinCompilation : AbstractKotlinCompilation<K2JVMCompilerArguments>() {
       args.noStdlib = true
       args.noReflect = true
 
+      args.useKapt4 = true
+      args.useK2 = true
+
       if (moduleName != null) args.moduleName = moduleName
 
       args.jvmTarget = jvmTarget
@@ -308,20 +315,23 @@ class KotlinCompilation : AbstractKotlinCompilation<K2JVMCompilerArguments>() {
 
       if (javacArguments.isNotEmpty()) args.javacArguments = javacArguments.toTypedArray()
 
-      if (supportCompatqualCheckerFrameworkAnnotations != null)
+      if (supportCompatqualCheckerFrameworkAnnotations != null) {
         args.supportCompatqualCheckerFrameworkAnnotations =
           supportCompatqualCheckerFrameworkAnnotations
+      }
 
       args.jvmDefault = jvmDefault
       args.strictMetadataVersionSemantics = strictMetadataVersionSemantics
       args.sanitizeParentheses = sanitizeParentheses
 
-      if (friendPaths.isNotEmpty())
+      if (friendPaths.isNotEmpty()) {
         args.friendPaths = friendPaths.map(File::getAbsolutePath).toTypedArray()
+      }
 
-      if (scriptResolverEnvironment.isNotEmpty())
+      if (scriptResolverEnvironment.isNotEmpty()) {
         args.scriptResolverEnvironment =
           scriptResolverEnvironment.map { (key, value) -> "$key=\"$value\"" }.toTypedArray()
+      }
 
       args.javaPackagePrefix = javaPackagePrefix
       args.suppressMissingBuiltinsError = suppressMissingBuiltinsError
@@ -345,6 +355,8 @@ class KotlinCompilation : AbstractKotlinCompilation<K2JVMCompilerArguments>() {
           putAll(kaptArgs)
           putIfAbsent(OPTION_KAPT_KOTLIN_GENERATED, kaptKotlinGeneratedDir.absolutePath)
         }
+
+        // it.processors.addAll(annotationProcessors.take(1).map { it.javaClass.name })
 
         it.mode = AptMode.STUBS_AND_APT
 
@@ -370,13 +382,13 @@ class KotlinCompilation : AbstractKotlinCompilation<K2JVMCompilerArguments>() {
      */
     MainComponentRegistrar.threadLocalParameters.set(
       MainComponentRegistrar.ThreadLocalParameters(
-        annotationProcessors.map {
+        processors = annotationProcessors.map {
           IncrementalProcessor(it, DeclaredProcType.NON_INCREMENTAL, kaptLogger)
         },
-        kaptOptions,
-        componentRegistrars,
-        compilerPluginRegistrars,
-        supportsK2,
+        kaptOptions = kaptOptions,
+        componentRegistrars = componentRegistrars,
+        compilerPluginRegistrar = compilerPluginRegistrars,
+        supportsK2 = supportsK2
       )
     )
 
@@ -390,15 +402,20 @@ class KotlinCompilation : AbstractKotlinCompilation<K2JVMCompilerArguments>() {
     }
 
     val isK2 = useKapt4()
-    if (isK2) {
-      this.compilerPluginRegistrars += Kapt4CompilerPluginRegistrar()
-      this.kotlincArguments += kaptOptions.toPluginOptions()
-    }
+    this.compilerPluginRegistrars += Kapt4CompilerPluginRegistrar()
+    this.kotlincArguments += kaptOptions.toPluginOptions()
 
     val k2JvmArgs =
       commonK2JVMArgs().also {
         it.freeArgs = sourcePaths
-        it.pluginClasspaths = (it.pluginClasspaths ?: emptyArray()) + arrayOf(getResourcesPath())
+        it.pluginClasspaths = (it.pluginClasspaths ?: emptyArray()) +
+          arrayOf(getResourcesPath()) +
+          arrayOf(
+            "/Users/rbusarow/.gradle/caches/modules-2/files-2.1/com.google.dagger/dagger-compiler/2.51.1/659d3b557b1a693168f7dcab6295a64e4bcf7df4/dagger-compiler-2.51.1.jar",
+            "/Users/rbusarow/.gradle/caches/modules-2/files-2.1/com.google.dagger/dagger-spi/2.51.1/76253c53aadb8ac37b5348f65f62426de26c6d1f/dagger-spi-2.51.1.jar",
+            "/Users/rbusarow/.gradle/caches/modules-2/files-2.1/com.google.dagger/dagger/2.51.1/48cb41ae824574a5c5f961e45c833650bf19c956/dagger-2.51.1.jar"
+          )
+
         if (kotlinSources.isEmpty()) {
           it.allowNoSourceFiles = true
         }
@@ -447,8 +464,8 @@ class KotlinCompilation : AbstractKotlinCompilation<K2JVMCompilerArguments>() {
         "-cp",
         (commonClasspaths() + classesDir).joinToString(
           File.pathSeparator,
-          transform = File::getAbsolutePath,
-        ),
+          transform = File::getAbsolutePath
+        )
       )
     }
 
@@ -473,7 +490,7 @@ class KotlinCompilation : AbstractKotlinCompilation<K2JVMCompilerArguments>() {
       "--system" and "-bootclasspath" options is not so easy.
       If the jdkHome is the same as the current process, we still run an in process compilation because it is
       expensive to fork a process to compile.
-      */
+       */
       log("compiling java in a sub-process because a jdkHome is specified")
       val jdkBinFile = File(jdkHome, "bin")
       check(jdkBinFile.exists()) { "No JDK bin folder found at: ${jdkBinFile.toPath()}" }
@@ -524,6 +541,7 @@ class KotlinCompilation : AbstractKotlinCompilation<K2JVMCompilerArguments>() {
             Diagnostic.Kind.ERROR -> error(diag.toString())
             Diagnostic.Kind.WARNING,
             Diagnostic.Kind.MANDATORY_WARNING -> warn(diag.toString())
+
             else -> log(diag.toString())
           }
         }
@@ -539,7 +557,7 @@ class KotlinCompilation : AbstractKotlinCompilation<K2JVMCompilerArguments>() {
               /* classes to be annotation processed */ null,
               javaSources
                 .map { FileJavaFileObject(it) }
-                .filter { it.kind == JavaFileObject.Kind.SOURCE },
+                .filter { it.kind == JavaFileObject.Kind.SOURCE }
             )
             .call()
 
@@ -551,7 +569,9 @@ class KotlinCompilation : AbstractKotlinCompilation<K2JVMCompilerArguments>() {
           printDiagnostics()
           error(e.toString())
           return ExitCode.INTERNAL_ERROR
-        } else throw e
+        } else {
+          throw e
+        }
       }
     }
   }
@@ -590,7 +610,7 @@ class KotlinCompilation : AbstractKotlinCompilation<K2JVMCompilerArguments>() {
     java.lang.RuntimeException: Could not find installation home path.
     Please make sure bin/idea.properties is present in the installation directory"
     See: https://github.com/arturbosch/detekt/issues/630
-    */
+     */
     withSystemProperty("idea.use.native.fs.for.win", "false") {
       // step 1 and 2: generate stubs and run annotation processors
       try {
@@ -632,7 +652,7 @@ class KotlinCompilation : AbstractKotlinCompilation<K2JVMCompilerArguments>() {
             kotlinStdLibCommonJar,
             kotlinStdLibJdkJar,
             kotlinReflectJar,
-            kotlinScriptRuntimeJar,
+            kotlinScriptRuntimeJar
           )
         )
 

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 @file:Suppress("DEPRECATION")
+
 package com.tschuchort.compiletesting
 
 import com.google.auto.service.AutoService
@@ -38,7 +39,9 @@ internal class MainComponentRegistrar : ComponentRegistrar, CompilerPluginRegist
   private fun getThreadLocalParameters(caller: String): ThreadLocalParameters? {
     val params = threadLocalParameters.get()
     if (params == null) {
-      System.err.println("WARNING: ${MainComponentRegistrar::class.simpleName}::$caller accessed before thread local parameters have been set")
+      System.err.println(
+        "WARNING: ${MainComponentRegistrar::class.simpleName}::$caller accessed before thread local parameters have been set"
+      )
     }
 
     return params
@@ -52,10 +55,16 @@ internal class MainComponentRegistrar : ComponentRegistrar, CompilerPluginRegist
         registerExtensions(configuration)
       }
     }
+
+    if (configuration.getBoolean(USE_FIR)) {
+    }
   }
 
   // Legacy plugins
-  override fun registerProjectComponents(project: MockProject, configuration: CompilerConfiguration) {
+  override fun registerProjectComponents(
+    project: MockProject,
+    configuration: CompilerConfiguration
+  ) {
     val parameters = getThreadLocalParameters("registerProjectComponents") ?: return
 
     /*
@@ -90,6 +99,6 @@ internal class MainComponentRegistrar : ComponentRegistrar, CompilerPluginRegist
     val kaptOptions: KaptOptions.Builder,
     val componentRegistrars: List<ComponentRegistrar>,
     val compilerPluginRegistrar: List<CompilerPluginRegistrar>,
-    val supportsK2: Boolean,
+    val supportsK2: Boolean
   )
 }
